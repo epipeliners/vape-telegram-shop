@@ -24,9 +24,13 @@ let tg = null;              // Telegram Web App instance
 // ============================================
 // INISIALISASI APLIKASI
 // ============================================
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🚀 Aplikasi Vape Store dimulai...');
+	document.addEventListener('DOMContentLoaded', initApp);
+	async function() {
+	console.log('🚀 Aplikasi Ladang VApe dimulai...');
     
+	function initApp() {
+	console.log('🚀 Inisialisasi app...');
+
     // Inisialisasi Telegram Web App
     if (window.Telegram && window.Telegram.WebApp) {
         tg = window.Telegram.WebApp;
@@ -44,13 +48,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Update tampilan awal
     updateCartDisplay();
     
+    // 2. Load produk di background (non-blocking)
+    setTimeout(() => {
+        loadProductsFromGoogleSheets();
+    }, 100);	
+
     // Sembunyikan loading screen
     setTimeout(() => {
         document.getElementById('loadingScreen').style.opacity = '0';
         setTimeout(() => {
             document.getElementById('loadingScreen').style.display = 'none';
         }, 300);
-    }, 500);
+    }, 2000);
     
     console.log('✅ Aplikasi siap digunakan');
 });
@@ -59,35 +68,53 @@ document.addEventListener('DOMContentLoaded', async function() {
 // FUNGSI LOAD PRODUK DARI GOOGLE SHEETS
 // ============================================
 async function loadProductsFromGoogleSheets() {
+    showLoading(true);
+    console.log('⏳ Memulai load produk...');
+    
     try {
-        console.log('📥 Memuat produk dari Google Sheets...');
+        // SET TIMEOUT (max 10 detik)
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Timeout: Gagal load produk setelah 10 detik')), 10000);
+        });
         
-        // Fetch data dari Google Sheets
-        const response = await fetch(CONFIG.GOOGLE_SHEETS_URL);
+        // Fetch data dengan timeout
+        const fetchPromise = fetch(CONFIG.GOOGLE_SHEETS_URL);
+        const response = await Promise.race([fetchPromise, timeoutPromise]);
         
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const csvData = await response.text();
-        console.log('📊 Data CSV diterima:', csvData.length, 'karakter');
+        console.log('✅ Data diterima:', csvData.length, 'karakter');
         
-        // Parse CSV ke array produk
+        // Parse data
         allProducts = parseCSV(csvData);
         
-        console.log(`✅ ${allProducts.length} produk berhasil dimuat`);
+        if (allProducts.length === 0) {
+            console.warn('⚠️ Tidak ada produk ditemukan, menggunakan data sample');
+            allProducts = getSampleProducts();
+        }
         
-        // Tampilkan produk
+        console.log(`✅ ${allProducts.length} produk berhasil dimuat`);
         renderProducts('all');
         
     } catch (error) {
         console.error('❌ Error loading products:', error);
         
-        // Fallback: Gunakan data contoh jika gagal load
+        // FALLBACK: Gunakan data sample
         allProducts = getSampleProducts();
         renderProducts('all');
         
-        alert('⚠️ Gagal memuat data dari Google Sheets. Menggunakan data contoh.');
+        // Tampilkan pesan user-friendly
+        if (error.message.includes('Timeout')) {
+            showNotification('⚠️ Koneksi lambat, menggunakan data lokal');
+        } else if (error.message.includes('CORS')) {
+            showNotification('⚠️ Akses ke Google Sheets terblokir');
+        }
+    } finally {
+        showLoading(false);
+        console.log('🏁 Load produk selesai');
     }
 }
 
@@ -95,68 +122,65 @@ async function loadProductsFromGoogleSheets() {
 // FUNGSI PARSE CSV (GOOGLE SHEETS TO ARRAY)
 // ============================================
 function parseCSV(csvText) {
-    const lines = csvText.trim().split('\n');
+    console.time('parseCSV'); // Timer
     
-    if (lines.length < 2) {
-        console.warn('⚠️ CSV kosong atau hanya header');
+    try {
+        const lines = csvText.trim().split('\n');
+        if (lines.length < 2) {
+            console.warn('CSV kosong');
+            return [];
+        }
+        
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        console.log('Header ditemukan:', headers);
+        
+        const products = [];
+        
+        // Proses maksimal 100 baris (untuk performa)
+        const maxRows = Math.min(lines.length, 101); // 100 produk max
+        
+        for (let i = 1; i < maxRows; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const values = line.split(',');
+            const product = {
+                id: i,
+                name: '',
+                price: 0,
+                category: 'liquid',
+                desc: '',
+                stock: 10,
+                image: ''
+            };
+            
+            // Mapping sederhana
+            headers.forEach((header, index) => {
+                const value = values[index] ? values[index].trim() : '';
+                
+                if (header.includes('nama')) product.name = value;
+                else if (header.includes('harga')) product.price = parseInt(value) || 0;
+                else if (header.includes('kategori')) product.category = value.toLowerCase();
+                else if (header.includes('deskripsi')) product.desc = value;
+                else if (header.includes('stok')) product.stock = parseInt(value) || 0;
+                else if (header.includes('gambar')) product.image = value;
+            });
+            
+            // Hanya tambah jika valid
+            if (product.name && product.price > 0) {
+                products.push(product);
+            }
+        }
+        
+        console.timeEnd('parseCSV'); // Stop timer
+        console.log(`Parsed ${products.length} produk`);
+        return products;
+        
+    } catch (error) {
+        console.error('Error parsing CSV:', error);
         return [];
     }
-    
-    // Ambil header (baris pertama)
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    console.log('📋 Header terdeteksi:', headers);
-    
-    // Mapping header ke field yang diharapkan
-    const fieldMapping = {
-        'nama': 'name',
-        'harga': 'price',
-        'kategori': 'category',
-        'deskripsi': 'desc',
-        'stok': 'stock',
-        'gambar': 'image',
-	'link': 'image',         // ← JIKA KOLOM NAMANYA "Link"
-	'url': 'image',          // ← JIKA KOLOM NAMANYA "URL"
-	'foto': 'image',         // ← JIKA KOLOM NAMANYA "Foto"
-	'image': 'image'         // ← JIKA KOLOM NAMANYA "Image"
-};
-    };
-    
-    const products = [];
-    
-    // Proses setiap baris data (dimulai dari baris 2)
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        // Split dengan memperhatikan koma di dalam quotes
-        const values = parseCSVLine(line);
-        
-        const product = {
-            id: i, // ID otomatis
-            name: '',
-            price: 0,
-            category: 'liquid',
-            desc: '',
-            stock: 10,
-            image: ''
-        };
-        
-        // Map values ke product berdasarkan header
-        headers.forEach((header, index) => {
-            const value = values[index] || '';
-            const fieldName = fieldMapping[header];
-            
-            if (fieldName) {
-                if (fieldName === 'price') {
-                    product[fieldName] = parseFloat(value.replace(/[^0-9]/g, '')) || 0;
-                } else if (fieldName === 'stock') {
-                    product[fieldName] = parseInt(value) || 0;
-                } else {
-                    product[fieldName] = value.trim();
-                }
-            }
-        });
-        
+}        
         // Validasi produk minimal
         if (product.name && product.price > 0) {
             // Standardisasi kategori
@@ -579,7 +603,7 @@ function processCheckout() {
     });
     
     // Format pesan untuk WhatsApp (SIMPLE VERSION)
-    let whatsappMessage = `*Ladang Vape Store*\n`;
+    let whatsappMessage = `*Ladang Vape*\n`;
     whatsappMessage += `*ORDER ID:* ${orderId}\n`;
     whatsappMessage += `*Tanggal:* ${orderDate}\n\n`;
     
@@ -692,7 +716,7 @@ function showNotification(message) {
 function saveOrderToLocalStorage(orderData) {
     try {
         // Ambil order yang sudah ada
-        const existingOrders = JSON.parse(localStorage.getItem('vapeStoreOrders') || '[]');
+        const existingOrders = JSON.parse(localStorage.getItem('LadangVApeOrders') || '[]');
         
         // Tambah order baru
         existingOrders.unshift(orderData);
@@ -701,7 +725,7 @@ function saveOrderToLocalStorage(orderData) {
         const trimmedOrders = existingOrders.slice(0, 50);
         
         // Simpan ke localStorage
-        localStorage.setItem('vapeStoreOrders', JSON.stringify(trimmedOrders));
+        localStorage.setItem('LadangVApeOrders', JSON.stringify(trimmedOrders));
         
         console.log('✅ Order disimpan ke localStorage:', orderData.orderId);
     } catch (error) {
@@ -750,3 +774,86 @@ function debugProducts() {
 // Panggil setelah load products
 // Tambah di fungsi loadProductsFromGoogleSheets(), setelah allProducts = parseCSV(csvData);
 debugProducts();
+
+async function loadProductsFromGoogleSheets() {
+    showLoading(true);
+    
+    // Cek cache dulu (valid 5 menit)
+    const cacheKey = 'LadangVApe_products_cache';
+    const cacheTimeKey = 'LadangVApe_cache_time';
+    const now = Date.now();
+    const cacheExpiry = 5 * 60 * 1000; // 5 menit
+    
+    const cachedTime = localStorage.getItem(cacheTimeKey);
+    const cachedData = localStorage.getItem(cacheKey);
+    
+    // Jika cache masih valid
+    if (cachedData && cachedTime && (now - parseInt(cachedTime)) < cacheExpiry) {
+        console.log('📦 Menggunakan data cache');
+        allProducts = JSON.parse(cachedData);
+        renderProducts('all');
+        showLoading(false);
+        return;
+    }
+    
+    try {
+        // Load dari Google Sheets
+        const response = await fetch(CONFIG.GOOGLE_SHEETS_URL);
+        const csvData = await response.text();
+        
+        allProducts = parseCSV(csvData);
+        
+        if (allProducts.length === 0) {
+            throw new Error('Data kosong');
+        }
+        
+        // Simpan ke cache
+        localStorage.setItem(cacheKey, JSON.stringify(allProducts));
+        localStorage.setItem(cacheTimeKey, now.toString());
+        
+        console.log(`✅ ${allProducts.length} produk dimuat & dicache`);
+        renderProducts('all');
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        
+        // Fallback ke cache lama atau sample
+        if (cachedData) {
+            allProducts = JSON.parse(cachedData);
+            showNotification('⚠️ Menggunakan data cache (offline mode)');
+        } else {
+            allProducts = getSampleProducts();
+            showNotification('⚠️ Menggunakan data sample');
+        }
+        
+        renderProducts('all');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Debug function
+function debugLoadTime() {
+    console.log('=== DEBUG LOAD TIME ===');
+    console.log('Google Sheets URL:', CONFIG.GOOGLE_SHEETS_URL);
+    
+    // Test fetch speed
+    const startTime = Date.now();
+    fetch(CONFIG.GOOGLE_SHEETS_URL)
+        .then(res => {
+            const fetchTime = Date.now() - startTime;
+            console.log(`Fetch time: ${fetchTime}ms`);
+            return res.text();
+        })
+        .then(text => {
+            const parseTime = Date.now() - startTime;
+            console.log(`Total time: ${parseTime}ms`);
+            console.log(`Data size: ${text.length} chars`);
+            console.log(`Lines: ${text.split('\n').length}`);
+        })
+        .catch(err => {
+            console.error('Fetch error:', err);
+        });
+}
+
+// Jalankan di console: debugLoadTime()

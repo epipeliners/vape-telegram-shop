@@ -2,19 +2,16 @@
 // KONFIGURASI APLIKASI - UBAH BAGIAN INI
 // ============================================
 const CONFIG = {
-    // 1. GANTI dengan URL Google Sheets Anda
-    // Cara dapatkan: File → Share → Publish to web → Pilih CSV → Copy link
     GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRYGiCijVDnA_aR-Jq33Dt__NnkZa8kdB9PuG3nqkkCtXGxuFw5rNT6sKpjYeqSxBdGZXJGr6nUJLfI/pub?gid=0&single=true&output=csv",
     
-    // 2. GANTI dengan nomor WhatsApp admin (format: 6281234567890)
-    ADMIN_WHATSAPP: "6285121251820",
+    // GANTI INI dengan nomor admin YANG BENAR
+    ADMIN_WHATSAPP: "6285121251820", // Format: 62XXXXXXXXXX
     
-    // 3. GANTI dengan nama toko Anda
     STORE_NAME: "Ladang VApe",
-    
-    // 4. Opsional: Ganti dengan username Telegram admin
     ADMIN_TELEGRAM: "@old_wine19xx"
 };
+
+
 
 // ============================================
 // VARIABEL GLOBAL
@@ -116,7 +113,12 @@ function parseCSV(csvText) {
         'kategori': 'category',
         'deskripsi': 'desc',
         'stok': 'stock',
-        'gambar': 'image'
+        'gambar': 'image',
+	'link': 'image',         // ← JIKA KOLOM NAMANYA "Link"
+	'url': 'image',          // ← JIKA KOLOM NAMANYA "URL"
+	'foto': 'image',         // ← JIKA KOLOM NAMANYA "Foto"
+	'image': 'image'         // ← JIKA KOLOM NAMANYA "Image"
+};
     };
     
     const products = [];
@@ -284,7 +286,7 @@ function renderProducts(category = 'all') {
         return;
     }
     
-    // Generate HTML untuk setiap produk
+     // Generate HTML untuk setiap produk
     container.innerHTML = filteredProducts.map(product => {
         const cartItem = cart.find(item => item.id === product.id);
         const quantity = cartItem ? cartItem.quantity : 0;
@@ -292,36 +294,54 @@ function renderProducts(category = 'all') {
             `<span class="product-stock"><i class="fas fa-check-circle"></i> Stok: ${product.stock}</span>` :
             `<span class="product-stock" style="color: var(--danger);"><i class="fas fa-times-circle"></i> Habis</span>`;
         
+        // Tentukan gambar atau icon
+        const productImage = product.image && product.image.trim() !== '' ? 
+            `<img src="${product.image}" alt="${product.name}" class="product-img" 
+                 onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\\'fas fa-smoking\\'></i>';">` :
+            `<i class="fas fa-smoking"></i>`;
+        
         return `
         <div class="product-card" data-category="${product.category}">
             <div class="product-image">
-                <i class="fas fa-smoking"></i>
+                ${productImage}
                 ${product.stock < 5 && product.stock > 0 ? '<span class="product-badge">Hampir Habis</span>' : ''}
             </div>
             <div class="product-info">
                 <h3 class="product-title">${product.name}</h3>
                 <div class="product-category">
-                    <i class="fas fa-tag"></i> ${product.category.toUpperCase()}
+                    <i class="fas fa-tag"></i> ${product.category ? product.category.toUpperCase() : 'LIQUID'}
                 </div>
                 <div class="product-price">${formatPrice(product.price)}</div>
                 ${stockText}
-                <div class="product-actions">
-                    <div class="qty-control">
-                        <button class="qty-btn" onclick="updateQuantity(${product.id}, -1)" 
-                            ${quantity === 0 ? 'disabled' : ''}>-</button>
-                        <span class="qty-display">${quantity}</span>
-                        <button class="qty-btn" onclick="updateQuantity(${product.id}, 1)"
-                            ${product.stock === 0 || quantity >= product.stock ? 'disabled' : ''}>+</button>
-                    </div>
-                    <button class="add-btn ${quantity > 0 ? 'added' : ''}" 
-                        onclick="updateQuantity(${product.id}, 1)"
-                        ${product.stock === 0 ? 'disabled style="background: var(--gray);"' : ''}>
-                        <i class="fas fa-${quantity > 0 ? 'check' : 'cart-plus'}"></i>
-                        ${quantity > 0 ? 'Ditambahkan' : 'Tambah'}
-                    </button>
-                </div>
-            </div>
-        </div>
+                // GANTI DENGAN INI:
+${product.stock > 0 ? `
+    <div class="product-stock-simple ${product.stock < 5 ? 'low-stock' : 'in-stock'}">
+        <i class="fas ${product.stock < 5 ? 'fa-exclamation-triangle' : 'fa-check-circle'}"></i>
+        Stok: ${product.stock}
+    </div>
+` : `
+    <div class="product-stock-simple out-of-stock">
+        <i class="fas fa-times-circle"></i>
+        Habis
+    </div>
+`}
+
+<!-- TOMBOL +/- SEDERHANA -->
+<div class="product-actions-simple">
+    <button class="qty-btn-simple" onclick="updateQuantity(${product.id}, -1)" 
+        ${quantity === 0 ? 'disabled' : ''}>
+        -
+    </button>
+    
+    <span class="qty-display-simple">
+        ${quantity}
+    </span>
+    
+    <button class="qty-btn-plus-simple" onclick="updateQuantity(${product.id}, 1)"
+        ${product.stock === 0 || quantity >= product.stock ? 'disabled' : ''}>
+        +
+    </button>
+</div>
         `;
     }).join('');
     
@@ -527,60 +547,73 @@ function processCheckout() {
         return;
     }
     
-    if (!/^[0-9+]{10,15}$/.test(phone.replace(/\s/g, ''))) {
-        showNotification('❌ Nomor WhatsApp tidak valid');
+    // Validasi nomor telepon
+    const cleanPhone = phone.replace(/\D/g, ''); // Hapus semua non-digit
+    let formattedPhone = '';
+    
+    if (cleanPhone.startsWith('0')) {
+        formattedPhone = '62' + cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith('62')) {
+        formattedPhone = cleanPhone;
+    } else if (cleanPhone.startsWith('8')) {
+        formattedPhone = '62' + cleanPhone;
+    } else {
+        showNotification('❌ Format nomor WhatsApp tidak valid');
+        return;
+    }
+    
+    // Validasi panjang nomor
+    if (formattedPhone.length < 10 || formattedPhone.length > 15) {
+        showNotification('❌ Nomor WhatsApp harus 10-15 digit');
         return;
     }
     
     // Generate order ID
-    const orderId = 'ORD' + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000);
-    const orderDate = new Date().toLocaleString('id-ID');
+    const orderId = 'ORD' + Date.now().toString().slice(-8);
+    const orderDate = new Date().toLocaleString('id-ID', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
     
-    // Format pesan untuk WhatsApp
-    let whatsappMessage = `*${CONFIG.STORE_NAME}*%0A`;
-    whatsappMessage += `*ORDER ID:* ${orderId}%0A`;
-    whatsappMessage += `*Tanggal:* ${orderDate}%0A%0A`;
+    // Format pesan untuk WhatsApp (SIMPLE VERSION)
+    let whatsappMessage = `*Ladang Vape Store*\n`;
+    whatsappMessage += `*ORDER ID:* ${orderId}\n`;
+    whatsappMessage += `*Tanggal:* ${orderDate}\n\n`;
     
-    whatsappMessage += `*DATA PELANGGAN:*%0A`;
-    whatsappMessage += `Nama: ${name}%0A`;
-    whatsappMessage += `WhatsApp: ${phone}%0A`;
-    whatsappMessage += `Alamat: ${address}%0A`;
-    whatsappMessage += `Metode Bayar: ${payment}%0A`;
+    whatsappMessage += `*DATA PELANGGAN:*\n`;
+    whatsappMessage += `Nama: ${name}\n`;
+    whatsappMessage += `WhatsApp: ${phone}\n`;
+    whatsappMessage += `Alamat: ${address}\n`;
+    whatsappMessage += `Metode Bayar: ${payment}\n`;
     
     if (notes) {
-        whatsappMessage += `Catatan: ${notes}%0A`;
+        whatsappMessage += `Catatan: ${notes}\n`;
     }
     
-    whatsappMessage += `%0A*DETAIL ORDER:*%0A`;
+    whatsappMessage += `\n*DETAIL ORDER:*\n`;
     
     let total = 0;
     cart.forEach((item, index) => {
         const itemTotal = item.price * item.quantity;
         total += itemTotal;
-        whatsappMessage += `${index + 1}. ${item.name}%0A`;
-        whatsappMessage += `   ${item.quantity} × ${formatPrice(item.price)} = ${formatPrice(itemTotal)}%0A`;
+        whatsappMessage += `${index + 1}. ${item.name}\n`;
+        whatsappMessage += `   ${item.quantity} × ${formatPrice(item.price)} = ${formatPrice(itemTotal)}\n`;
     });
     
-    whatsappMessage += `%0A*TOTAL: ${formatPrice(total)}*%0A%0A`;
+    whatsappMessage += `\n*TOTAL: ${formatPrice(total)}*\n\n`;
     whatsappMessage += `_Pesanan ini dibuat via Telegram Mini App_`;
     
-    // Encode pesan untuk URL WhatsApp
-    const encodedMessage = encodeURIComponent(whatsappMessage);
+    // URL WhatsApp yang BENAR
+    const whatsappURL = `https://api.whatsapp.com/send?phone=${CONFIG.ADMIN_WHATSAPP}&text=${encodeURIComponent(whatsappMessage)}`;
     
-    // Format nomor telepon (hilangkan + atau 0 di depan)
-    let cleanPhone = phone.replace(/^\+/, '').replace(/^0/, '62');
-    if (!cleanPhone.startsWith('62')) {
-        cleanPhone = '62' + cleanPhone;
-    }
-    
-    // Buat URL WhatsApp
-    const whatsappURL = `https://wa.me/${CONFIG.ADMIN_WHATSAPP || cleanPhone}?text=${encodedMessage}`;
-    
-    // Simpan order ke localStorage (simpan sementara)
+    // Simpan order ke localStorage
     saveOrderToLocalStorage({
         orderId,
         date: orderDate,
-        customer: { name, phone, address },
+        customer: { name, phone: formattedPhone, address },
         payment,
         notes,
         items: cart.map(item => ({
@@ -593,7 +626,7 @@ function processCheckout() {
         status: 'pending'
     });
     
-    // Buka WhatsApp
+    // Buka WhatsApp di tab baru
     window.open(whatsappURL, '_blank');
     
     // Reset keranjang
@@ -606,7 +639,7 @@ function processCheckout() {
     hideCart();
     
     // Tampilkan konfirmasi
-    showNotification('✅ Order berhasil! Admin akan menghubungi Anda via WhatsApp.');
+    showNotification('✅ Order berhasil! WhatsApp admin terbuka.');
 }
 
 // ============================================
@@ -686,3 +719,34 @@ window.hideCart = hideCart;
 window.openCheckoutForm = openCheckoutForm;
 window.closeCheckoutForm = closeCheckoutForm;
 window.processCheckout = processCheckout;
+
+// Tambah fungsi ini di akhir file script.js
+function debugProducts() {
+    console.log("=== DEBUG PRODUK ===");
+    console.log("Total produk:", allProducts.length);
+    
+    allProducts.forEach((product, index) => {
+        console.log(`Produk #${index + 1}:`, {
+            nama: product.name,
+            harga: product.price,
+            kategori: product.category,
+            gambar: product.image || '(tidak ada)',
+            panjang_link: product.image ? product.image.length : 0
+        });
+    });
+    
+    // Cek apakah gambar load
+    if (allProducts.length > 0 && allProducts[0].image) {
+        console.log("Testing gambar pertama:", allProducts[0].image);
+        
+        // Test load gambar
+        const testImg = new Image();
+        testImg.onload = () => console.log("✅ Gambar bisa di-load");
+        testImg.onerror = () => console.log("❌ Gambar ERROR (404 atau CORS)");
+        testImg.src = allProducts[0].image;
+    }
+}
+
+// Panggil setelah load products
+// Tambah di fungsi loadProductsFromGoogleSheets(), setelah allProducts = parseCSV(csvData);
+debugProducts();

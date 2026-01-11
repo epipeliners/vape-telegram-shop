@@ -890,4 +890,38 @@ header {
         min-width: 40px;
     }
 }
+/* Responsive untuk tombol */
+@media (max-width: 480px) {
+    .product-actions-simple {
+        gap: 15px;
+    }
+    
+    .qty-btn-simple,
+    .qty-btn-plus-simple {
+        width: 52px;
+        height: 52px;
+        font-size: 26px;
+    }
+    
+    .qty-display-simple {
+        font-size: 22px;
+        min-width: 50px;
+        padding: 10px 14px;
+    }
+}
 
+/* Extra besar jika perlu */
+@media (max-width: 360px) {
+    .qty-btn-simple,
+    .qty-btn-plus-simple {
+        width: 48px;
+        height: 48px;
+        font-size: 24px;
+    }
+    
+    .qty-display-simple {
+        font-size: 20px;
+        min-width: 45px;
+        padding: 8px 12px;
+    }
+}

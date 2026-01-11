@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vape Store Online</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Memuat produk...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-smoking"></i>
+                <h1>VAPE STORE</h1>
+            </div>
+            <div class="cart-icon" onclick="showCart()">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="cart-count" id="cartCount">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Kategori Produk -->
+    <div class="categories-container">
+        <div class="categories-scroll">
+            <button class="category-btn active" onclick="filterProducts('all')">
+                <i class="fas fa-boxes"></i> Semua
+            </button>
+            <button class="category-btn" onclick="filterProducts('liquid')">
+                <i class="fas fa-tint"></i> Liquid
+            </button>
+            <button class="category-btn" onclick="filterProducts('device')">
+                <i class="fas fa-mobile-alt"></i> Device
+            </button>
+            <button class="category-btn" onclick="filterProducts('pod')">
+                <i class="fas fa-battery-full"></i> Pod
+            </button>
+            <button class="category-btn" onclick="filterProducts('coil')">
+                <i class="fas fa-cogs"></i> Coil
+            </button>
+            <button class="category-btn" onclick="filterProducts('aksesoris')">
+                <i class="fas fa-tools"></i> Aksesoris
+            </button>
+        </div>
+    </div>
+
+    <!-- Container Produk -->
+    <main class="main-container">
+        <div class="products-grid" id="productsGrid">
+            <!-- Produk akan dimuat di sini dari Google Sheets -->
+        </div>
+        
+        <div class="empty-state" id="emptyState">
+            <i class="fas fa-box-open"></i>
+            <h3>Belum ada produk</h3>
+            <p>Produk sedang dimuat...</p>
+        </div>
+    </main>
+
+    <!-- Keranjang Belanja -->
+    <div class="cart-sidebar" id="cartSidebar">
+        <div class="cart-header">
+            <h2><i class="fas fa-shopping-cart"></i> Keranjang Belanja</h2>
+            <button class="close-cart" onclick="hideCart()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="cart-items" id="cartItems">
+            <!-- Item keranjang akan muncul di sini -->
+            <div class="empty-cart">
+                <i class="fas fa-shopping-basket"></i>
+                <p>Keranjang belanja kosong</p>
+            </div>
+        </div>
+        
+        <div class="cart-summary">
+            <div class="summary-row">
+                <span>Subtotal</span>
+                <span id="subtotalPrice">Rp 0</span>
+            </div>
+            <div class="summary-row total">
+                <span>Total Belanja</span>
+                <span id="totalPrice">Rp 0</span>
+            </div>
+            
+            <button class="checkout-btn" onclick="openCheckoutForm()">
+                <i class="fas fa-paper-plane"></i> Lanjutkan Pesanan
+            </button>
+            
+            <p class="cart-note">
+                <i class="fas fa-info-circle"></i>
+                Setelah checkout, admin akan menghubungi Anda untuk konfirmasi
+            </p>
+        </div>
+    </div>
+    
+    <div class="overlay" id="overlay" onclick="hideCart()"></div>
+
+    <!-- Modal Checkout -->
+    <div class="modal" id="checkoutModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-check-circle"></i> Data Pemesanan</h3>
+                <button class="close-modal" onclick="closeCheckoutForm()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="checkoutForm">
+                    <div class="form-group">
+                        <label for="customerName">
+                            <i class="fas fa-user"></i> Nama Lengkap *
+                        </label>
+                        <input type="text" id="customerName" required placeholder="Masukkan nama Anda">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="customerPhone">
+                            <i class="fas fa-phone"></i> Nomor WhatsApp *
+                        </label>
+                        <input type="tel" id="customerPhone" required placeholder="Contoh: 081234567890">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="customerAddress">
+                            <i class="fas fa-map-marker-alt"></i> Alamat Pengiriman *
+                        </label>
+                        <textarea id="customerAddress" rows="3" required placeholder="Alamat lengkap termasuk kecamatan dan kode pos"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="paymentMethod">
+                            <i class="fas fa-credit-card"></i> Metode Pembayaran *
+                        </label>
+                        <select id="paymentMethod" required>
+                            <option value="">Pilih metode pembayaran</option>
+                            <option value="transfer">Transfer Bank (BCA/Mandiri/BNI)</option>
+                            <option value="cod">COD (Cash on Delivery)</option>
+                            <option value="qris">QRIS (E-Wallet)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="customerNotes">
+                            <i class="fas fa-sticky-note"></i> Catatan Tambahan (Opsional)
+                        </label>
+                        <textarea id="customerNotes" rows="2" placeholder="Catatan untuk penjual, contoh: warna atau rasa tertentu"></textarea>
+                    </div>
+                    
+                    <div class="order-summary">
+                        <h4><i class="fas fa-receipt"></i> Ringkasan Pesanan</h4>
+                        <div id="orderSummary">
+                            <!-- Ringkasan order akan dimuat di sini -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="closeCheckoutForm()">
+                    <i class="fas fa-arrow-left"></i> Kembali
+                </button>
+                <button type="button" class="btn-submit" onclick="processCheckout()">
+                    <i class="fab fa-whatsapp"></i> Kirim ke WhatsApp Admin
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="modalOverlay" onclick="closeCheckoutForm()"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>

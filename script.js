@@ -4,7 +4,7 @@
 const CONFIG = {
     // 1. GANTI dengan URL Google Sheets Anda
     // Cara: File → Share → Publish to web → CSV → Copy link
-    GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?output=csv",
+    GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRYGiCijVDnA_aR-Jq33Dt__NnkZa8kdB9PuG3nqkkCtXGxuFw5rNT6sKpjYeqSxBdGZXJGr6nUJLfI/pub?gid=0&single=true&output=csv",
     
     // 2. GANTI dengan nomor WhatsApp admin (format: 6285121251820)
     ADMIN_WHATSAPP: "6285121251820",
@@ -847,3 +847,4 @@ function debugProducts() {
 }
 
 // Jalankan: debugProducts() di Console
+

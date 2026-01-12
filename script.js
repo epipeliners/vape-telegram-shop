@@ -733,9 +733,9 @@ function processCheckout() {
 // FUNGSI BANTUAN (HELPER FUNCTIONS)
 // ============================================
 function formatPrice(price) {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat('th-TH', {
         style: 'currency',
-        currency: 'IDR',
+        currency: 'THB',
         minimumFractionDigits: 0
     }).format(price);
 }
@@ -847,4 +847,5 @@ function debugProducts() {
 }
 
 // Jalankan: debugProducts() di Console
+
 

@@ -3,40 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vape Store Online</title>
+    <title>Ladang Vape</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Using jsDelivr instead of cdnjs to avoid tracking prevention -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-   <!-- Ganti loading screen -->
-<div class="loading-screen" id="loadingScreen">
-    <div class="loading-content">
-        <div class="spinner"></div>
-        <p id="loadingText">Memuat produk...</p>
-        <div class="loading-progress">
-            <div class="loading-progress-bar"></div>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p id="loadingText">Memuat produk...</p>
+            <div class="loading-progress">
+                <div class="loading-progress-bar"></div>
+            </div>
+            <p class="loading-subtext">Ladang Vape</p>
         </div>
-        <p class="loading-subtext">Ladang Vape Store</p>
     </div>
-</div>
 
     <!-- Header -->
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <i class="fas fa-smoking"></i>
-                <h1>VAPE STORE</h1>
+    <header class="app-header">
+        <div class="header-container">
+            <div class="header-left">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-smoking"></i>
+                    </div>
+                    <div class="logo-text">
+                        <h1>LADANG VAPE</h1>
+                        <p class="tagline">Premium Vape Products</p>
+                    </div>
+                </div>
             </div>
-            <div class="cart-icon" onclick="showCart()">
-                <i class="fas fa-shopping-cart"></i>
-                <span class="cart-count" id="cartCount">0</span>
+            
+            <div class="header-right">
+                <button class="cart-header-btn" onclick="showCart()">
+                    <i class="fas fa-shopping-bag"></i>
+                    <span class="cart-badge" id="cartBadge">0</span>
+                </button>
             </div>
         </div>
     </header>
 
-    <!-- Kategori Produk -->
+    <!-- Categories -->
     <div class="categories-container">
         <div class="categories-scroll">
             <button class="category-btn active" onclick="filterProducts('all')">
@@ -54,16 +65,13 @@
             <button class="category-btn" onclick="filterProducts('coil')">
                 <i class="fas fa-cogs"></i> Coil
             </button>
-            <button class="category-btn" onclick="filterProducts('aksesoris')">
-                <i class="fas fa-tools"></i> Aksesoris
-            </button>
         </div>
     </div>
 
-    <!-- Container Produk -->
+    <!-- Main Products Container -->
     <main class="main-container">
         <div class="products-grid" id="productsGrid">
-            <!-- Produk akan dimuat di sini dari Google Sheets -->
+            <!-- Products will be loaded here from Google Sheets -->
         </div>
         
         <div class="empty-state" id="emptyState">
@@ -73,7 +81,7 @@
         </div>
     </main>
 
-    <!-- Keranjang Belanja -->
+    <!-- Shopping Cart Sidebar -->
     <div class="cart-sidebar" id="cartSidebar">
         <div class="cart-header">
             <h2><i class="fas fa-shopping-cart"></i> Keranjang Belanja</h2>
@@ -83,7 +91,6 @@
         </div>
         
         <div class="cart-items" id="cartItems">
-            <!-- Item keranjang akan muncul di sini -->
             <div class="empty-cart">
                 <i class="fas fa-shopping-basket"></i>
                 <p>Keranjang belanja kosong</p>
@@ -93,11 +100,11 @@
         <div class="cart-summary">
             <div class="summary-row">
                 <span>Subtotal</span>
-                <span id="subtotalPrice">Rp 0</span>
+                <span id="subtotalPrice">0 ฿</span>
             </div>
             <div class="summary-row total">
                 <span>Total Belanja</span>
-                <span id="totalPrice">Rp 0</span>
+                <span id="totalPrice"> ฿</span>
             </div>
             
             <button class="checkout-btn" onclick="openCheckoutForm()">
@@ -106,14 +113,14 @@
             
             <p class="cart-note">
                 <i class="fas fa-info-circle"></i>
-                Setelah checkout, admin akan menghubungi Anda untuk konfirmasi
+                Admin akan menghubungi Anda via WhatsApp
             </p>
         </div>
     </div>
     
     <div class="overlay" id="overlay" onclick="hideCart()"></div>
 
-    <!-- Modal Checkout -->
+    <!-- Checkout Modal -->
     <div class="modal" id="checkoutModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -152,7 +159,7 @@
                         </label>
                         <select id="paymentMethod" required>
                             <option value="">Pilih metode pembayaran</option>
-                            <option value="transfer">Transfer Bank (BCA/Mandiri/BNI)</option>
+                            <option value="transfer">Transfer Bank</option>
                             <option value="cod">COD (Cash on Delivery)</option>
                             <option value="qris">QRIS (E-Wallet)</option>
                         </select>
@@ -160,15 +167,15 @@
                     
                     <div class="form-group">
                         <label for="customerNotes">
-                            <i class="fas fa-sticky-note"></i> Catatan Tambahan (Opsional)
+                            <i class="fas fa-sticky-note"></i> Catatan Tambahan
                         </label>
-                        <textarea id="customerNotes" rows="2" placeholder="Catatan untuk penjual, contoh: warna atau rasa tertentu"></textarea>
+                        <textarea id="customerNotes" rows="2" placeholder="Catatan untuk penjual"></textarea>
                     </div>
                     
                     <div class="order-summary">
                         <h4><i class="fas fa-receipt"></i> Ringkasan Pesanan</h4>
                         <div id="orderSummary">
-                            <!-- Ringkasan order akan dimuat di sini -->
+                            <!-- Order summary will be loaded here -->
                         </div>
                     </div>
                 </form>
@@ -179,7 +186,7 @@
                     <i class="fas fa-arrow-left"></i> Kembali
                 </button>
                 <button type="button" class="btn-submit" onclick="processCheckout()">
-                    <i class="fab fa-whatsapp"></i> Kirim ke WhatsApp Admin
+                    <i class="fab fa-whatsapp"></i> Kirim ke WhatsApp
                 </button>
             </div>
         </div>

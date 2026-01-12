@@ -1,17 +1,20 @@
 // ============================================
-// KONFIGURASI APLIKASI - UBAH BAGIAN INI
+// KONFIGURASI APLIKASI - EDIT BAGIAN INI!
 // ============================================
 const CONFIG = {
-    GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRYGiCijVDnA_aR-Jq33Dt__NnkZa8kdB9PuG3nqkkCtXGxuFw5rNT6sKpjYeqSxBdGZXJGr6nUJLfI/pub?gid=0&single=true&output=csv",
+    // 1. GANTI dengan URL Google Sheets Anda
+    // Cara: File → Share → Publish to web → CSV → Copy link
+    GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?output=csv",
     
-    // GANTI INI dengan nomor admin YANG BENAR
-    ADMIN_WHATSAPP: "6285121251820", // Format: 62XXXXXXXXXX
+    // 2. GANTI dengan nomor WhatsApp admin (format: 6285121251820)
+    ADMIN_WHATSAPP: "6285121251820",
     
-    STORE_NAME: "Ladang VApe",
-    ADMIN_TELEGRAM: "@old_wine19xx"
+    // 3. GANTI dengan nama toko Anda
+    STORE_NAME: "Ladang Vape Store",
+    
+    // 4. Cache time dalam milidetik (5 menit)
+    CACHE_TIME: 5 * 60 * 1000
 };
-
-
 
 // ============================================
 // VARIABEL GLOBAL
@@ -24,126 +27,142 @@ let tg = null;              // Telegram Web App instance
 // ============================================
 // INISIALISASI APLIKASI
 // ============================================
-	document.addEventListener('DOMContentLoaded', initApp);
-	async function() {
-	console.log('🚀 Aplikasi Ladang VApe dimulai...');
+function initApp() {
+    console.log('🚀 Aplikasi Ladang Vape dimulai...');
     
-	function initApp() {
-	console.log('🚀 Inisialisasi app...');
-
-    // Inisialisasi Telegram Web App
+    // Update cart dulu
+    updateCartDisplay();
+    
+    // Load produk di background
+    setTimeout(() => {
+        loadProductsFromGoogleSheets();
+    }, 100);
+    
+    // Telegram Web App setup
     if (window.Telegram && window.Telegram.WebApp) {
         tg = window.Telegram.WebApp;
         tg.expand();
         tg.enableClosingConfirmation();
-        tg.MainButton.setText("🛒 Buka Keranjang");
+        tg.MainButton.setText("🛒 Keranjang");
         tg.MainButton.onClick(showCart);
         tg.MainButton.show();
         console.log('Telegram Web App aktif');
     }
     
-    // Load produk dari Google Sheets
-    await loadProductsFromGoogleSheets();
-    
-    // Update tampilan awal
-    updateCartDisplay();
-    
-    // 2. Load produk di background (non-blocking)
+    // Sembunyikan loading screen setelah 3 detik max
     setTimeout(() => {
-        loadProductsFromGoogleSheets();
-    }, 100);	
+        const loadingScreen = document.getElementById('loadingScreen');
+        if (loadingScreen) {
+            loadingScreen.style.opacity = '0';
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+            }, 300);
+        }
+    }, 3000);
+}
 
-    // Sembunyikan loading screen
-    setTimeout(() => {
-        document.getElementById('loadingScreen').style.opacity = '0';
-        setTimeout(() => {
-            document.getElementById('loadingScreen').style.display = 'none';
-        }, 300);
-    }, 2000);
-    
-    console.log('✅ Aplikasi siap digunakan');
-});
+// Event listener
+document.addEventListener('DOMContentLoaded', initApp);
 
 // ============================================
 // FUNGSI LOAD PRODUK DARI GOOGLE SHEETS
 // ============================================
 async function loadProductsFromGoogleSheets() {
     showLoading(true);
-    console.log('⏳ Memulai load produk...');
+    updateLoadingText('Memuat produk dari Google Sheets...');
     
     try {
-        // SET TIMEOUT (max 10 detik)
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Timeout: Gagal load produk setelah 10 detik')), 10000);
+        console.log('📥 Memulai load produk...');
+        
+        // Cek cache dulu
+        const cached = checkCache();
+        if (cached) {
+            console.log('📦 Menggunakan data cache');
+            allProducts = cached;
+            renderProducts('all');
+            showLoading(false);
+            return;
+        }
+        
+        // Fetch dari Google Sheets dengan timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(CONFIG.GOOGLE_SHEETS_URL, {
+            signal: controller.signal
         });
         
-        // Fetch data dengan timeout
-        const fetchPromise = fetch(CONFIG.GOOGLE_SHEETS_URL);
-        const response = await Promise.race([fetchPromise, timeoutPromise]);
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const csvData = await response.text();
         console.log('✅ Data diterima:', csvData.length, 'karakter');
         
-        // Parse data
+        // Parse CSV
         allProducts = parseCSV(csvData);
         
         if (allProducts.length === 0) {
-            console.warn('⚠️ Tidak ada produk ditemukan, menggunakan data sample');
-            allProducts = getSampleProducts();
+            console.warn('⚠️ Tidak ada produk ditemukan');
+            throw new Error('Data kosong');
         }
         
         console.log(`✅ ${allProducts.length} produk berhasil dimuat`);
+        
+        // Simpan ke cache
+        saveToCache(allProducts);
+        
+        // Render produk
         renderProducts('all');
         
     } catch (error) {
         console.error('❌ Error loading products:', error);
         
-        // FALLBACK: Gunakan data sample
+        // Fallback ke sample data
         allProducts = getSampleProducts();
         renderProducts('all');
         
-        // Tampilkan pesan user-friendly
-        if (error.message.includes('Timeout')) {
-            showNotification('⚠️ Koneksi lambat, menggunakan data lokal');
-        } else if (error.message.includes('CORS')) {
-            showNotification('⚠️ Akses ke Google Sheets terblokir');
+        // Tampilkan notifikasi
+        if (error.name === 'AbortError') {
+            showNotification('⚠️ Koneksi timeout, menggunakan data cache');
+        } else {
+            showNotification('⚠️ Gagal memuat data, menggunakan data contoh');
         }
+        
     } finally {
         showLoading(false);
-        console.log('🏁 Load produk selesai');
     }
 }
 
 // ============================================
-// FUNGSI PARSE CSV (GOOGLE SHEETS TO ARRAY)
+// FUNGSI PARSE CSV DENGAN AUTO IMAGE
 // ============================================
 function parseCSV(csvText) {
-    console.time('parseCSV'); // Timer
+    console.time('parseCSV');
     
     try {
         const lines = csvText.trim().split('\n');
         if (lines.length < 2) {
-            console.warn('CSV kosong');
+            console.warn('CSV kosong atau hanya header');
             return [];
         }
         
+        // Ambil header (baris pertama)
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-        console.log('Header ditemukan:', headers);
+        console.log('📋 Header terdeteksi:', headers);
         
         const products = [];
         
-        // Proses maksimal 100 baris (untuk performa)
-        const maxRows = Math.min(lines.length, 101); // 100 produk max
-        
-        for (let i = 1; i < maxRows; i++) {
+        // Proses setiap baris data
+        for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
             
-            const values = line.split(',');
+            // Handle CSV dengan koma di dalam quotes
+            const values = parseCSVLine(line);
+            
             const product = {
                 id: i,
                 name: '',
@@ -154,53 +173,58 @@ function parseCSV(csvText) {
                 image: ''
             };
             
-            // Mapping sederhana
+            // Mapping kolom berdasarkan header
             headers.forEach((header, index) => {
                 const value = values[index] ? values[index].trim() : '';
                 
-                if (header.includes('nama')) product.name = value;
-                else if (header.includes('harga')) product.price = parseInt(value) || 0;
-                else if (header.includes('kategori')) product.category = value.toLowerCase();
-                else if (header.includes('deskripsi')) product.desc = value;
-                else if (header.includes('stok')) product.stock = parseInt(value) || 0;
-                else if (header.includes('gambar')) product.image = value;
+                // Auto-detect kolom
+                if (header.includes('nama') || header.includes('name')) {
+                    product.name = value;
+                } else if (header.includes('harga') || header.includes('price')) {
+                    product.price = parseInt(value.replace(/[^0-9]/g, '')) || 0;
+                } else if (header.includes('kategori') || header.includes('category')) {
+                    product.category = value.toLowerCase();
+                } else if (header.includes('deskripsi') || header.includes('desc')) {
+                    product.desc = value;
+                } else if (header.includes('stok') || header.includes('stock')) {
+                    product.stock = parseInt(value) || 0;
+                } else if (header.includes('gambar') || header.includes('image') || 
+                          header.includes('foto') || header.includes('photo') ||
+                          header.includes('url') || header.includes('link')) {
+                    product.image = value;
+                }
             });
             
-            // Hanya tambah jika valid
+            // Validasi produk minimal
             if (product.name && product.price > 0) {
+                // Standardisasi kategori
+                const cat = product.category.toLowerCase();
+                if (cat.includes('liquid') || cat.includes('cairan')) product.category = 'liquid';
+                else if (cat.includes('device') || cat.includes('mod') || cat.includes('kit')) product.category = 'device';
+                else if (cat.includes('pod') || cat.includes('disposable')) product.category = 'pod';
+                else if (cat.includes('coil') || cat.includes('head')) product.category = 'coil';
+                else if (cat.includes('aksesoris') || cat.includes('accessory')) product.category = 'aksesoris';
+                
+                // Auto-fix Google Drive links
+                if (product.image && product.image.includes('drive.google.com')) {
+                    product.image = convertGoogleDriveLink(product.image);
+                }
+                
                 products.push(product);
             }
         }
         
-        console.timeEnd('parseCSV'); // Stop timer
-        console.log(`Parsed ${products.length} produk`);
+        console.timeEnd('parseCSV');
+        console.log(`📊 Parsed ${products.length} produk dengan gambar`);
         return products;
         
     } catch (error) {
         console.error('Error parsing CSV:', error);
         return [];
     }
-}        
-        // Validasi produk minimal
-        if (product.name && product.price > 0) {
-            // Standardisasi kategori
-            if (product.category) {
-                const cat = product.category.toLowerCase();
-                if (cat.includes('liquid') || cat.includes('cairan')) product.category = 'liquid';
-                else if (cat.includes('device') || cat.includes('mod')) product.category = 'device';
-                else if (cat.includes('pod') || cat.includes('disposable')) product.category = 'pod';
-                else if (cat.includes('coil') || cat.includes('head')) product.category = 'coil';
-                else if (cat.includes('aksesoris') || cat.includes('accessory')) product.category = 'aksesoris';
-            }
-            
-            products.push(product);
-        }
-    }
-    
-    return products;
 }
 
-// Helper function untuk parse CSV line
+// Helper untuk parse CSV line dengan quotes
 function parseCSVLine(line) {
     const values = [];
     let current = '';
@@ -223,64 +247,112 @@ function parseCSVLine(line) {
     return values;
 }
 
+// Convert Google Drive link ke direct link
+function convertGoogleDriveLink(url) {
+    if (!url) return '';
+    
+    if (url.includes('drive.google.com/file/d/')) {
+        // Format: https://drive.google.com/file/d/FILE_ID/view
+        const match = url.match(/\/d\/([^\/]+)/);
+        if (match && match[1]) {
+            return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+        }
+    } else if (url.includes('drive.google.com/open?id=')) {
+        // Format: https://drive.google.com/open?id=FILE_ID
+        const match = url.match(/id=([^&]+)/);
+        if (match && match[1]) {
+            return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+        }
+    }
+    
+    return url; // Return original jika bukan Google Drive
+}
+
 // ============================================
-// DATA CONTOH (FALLBACK JIKA SHEETS GAGAL)
+// CACHE SYSTEM
+// ============================================
+function checkCache() {
+    try {
+        const cacheKey = 'ladangVape_products_cache';
+        const cacheTimeKey = 'ladangVape_cache_time';
+        
+        const cachedData = localStorage.getItem(cacheKey);
+        const cachedTime = localStorage.getItem(cacheTimeKey);
+        
+        if (cachedData && cachedTime) {
+            const timeDiff = Date.now() - parseInt(cachedTime);
+            
+            if (timeDiff < CONFIG.CACHE_TIME) {
+                return JSON.parse(cachedData);
+            } else {
+                console.log('Cache expired');
+                localStorage.removeItem(cacheKey);
+                localStorage.removeItem(cacheTimeKey);
+            }
+        }
+    } catch (error) {
+        console.error('Cache error:', error);
+    }
+    
+    return null;
+}
+
+function saveToCache(products) {
+    try {
+        localStorage.setItem('ladangVape_products_cache', JSON.stringify(products));
+        localStorage.setItem('ladangVape_cache_time', Date.now().toString());
+        console.log('✅ Data disimpan ke cache');
+    } catch (error) {
+        console.error('Gagal menyimpan cache:', error);
+    }
+}
+
+// ============================================
+// DATA CONTOH (FALLBACK)
 // ============================================
 function getSampleProducts() {
     return [
         {
             id: 1,
-            name: "Liquid Saltnic Mango 30ml",
-            price: 85000,
+            name: "CT INFY PLUS CHERRY STRAWBERRY 2.5 ML",
+            price: 150,
             category: "liquid",
-            desc: "Rasa mangga manis, nikotin 30mg",
-            stock: 15
+            desc: "Liquid saltnic rasa cherry strawberry",
+            stock: 10,
+            image: ""
         },
         {
             id: 2,
-            name: "Liquid Freebase Vanilla 60ml",
-            price: 120000,
+            name: "CT INFY PLUS APPLE ALOE VERA 2.5 ML",
+            price: 150,
             category: "liquid",
-            desc: "Rasa vanilla cream, nikotin 3mg",
-            stock: 8
+            desc: "Liquid saltnic rasa apple aloe vera",
+            stock: 5,
+            image: ""
         },
         {
             id: 3,
-            name: "Vaporesso XROS 3 Pod Kit",
+            name: "VAPORESSO XROS 3 POD KIT",
             price: 350000,
             category: "device",
-            desc: "Pod system, USB-C, adjustable airflow",
-            stock: 5
+            desc: "Pod system dengan adjustable airflow",
+            stock: 3,
+            image: ""
         },
         {
             id: 4,
-            name: "Geekvape Aegis Solo 2",
-            price: 650000,
-            category: "device",
-            desc: "Waterproof, shockproof, single 18650 battery",
-            stock: 3
-        },
-        {
-            id: 5,
-            name: "Elf Bar BC5000 Disposable",
+            name: "ELF BAR BC5000 DISPOSABLE",
             price: 250000,
             category: "pod",
-            desc: "Disposable pod 5000 puffs, berbagai rasa",
-            stock: 20
-        },
-        {
-            id: 6,
-            name: "Coil Vaporesso GTX 0.8ohm",
-            price: 45000,
-            category: "coil",
-            desc: "Paket 3 coil, untuk GTX series",
-            stock: 25
+            desc: "Disposable pod 5000 puffs",
+            stock: 8,
+            image: ""
         }
     ];
 }
 
 // ============================================
-// FUNGSI RENDER PRODUK KE TAMPILAN
+// FUNGSI RENDER PRODUK DENGAN GAMBAR
 // ============================================
 function renderProducts(category = 'all') {
     currentCategory = category;
@@ -310,62 +382,65 @@ function renderProducts(category = 'all') {
         return;
     }
     
-     // Generate HTML untuk setiap produk
+    // Generate HTML untuk setiap produk
     container.innerHTML = filteredProducts.map(product => {
         const cartItem = cart.find(item => item.id === product.id);
         const quantity = cartItem ? cartItem.quantity : 0;
-        const stockText = product.stock > 0 ? 
-            `<span class="product-stock"><i class="fas fa-check-circle"></i> Stok: ${product.stock}</span>` :
-            `<span class="product-stock" style="color: var(--danger);"><i class="fas fa-times-circle"></i> Habis</span>`;
         
-        // Tentukan gambar atau icon
+        // Tentukan status stok
+        const stockStatus = product.stock === 0 ? 'out-of-stock' : 
+                           product.stock < 5 ? 'low-stock' : 'in-stock';
+        const stockText = product.stock === 0 ? 'Habis' : 
+                          product.stock < 5 ? `Stok: ${product.stock}` : 'Tersedia';
+        
+        // Tentukan icon stok
+        const stockIcon = product.stock === 0 ? 'fa-times-circle' : 
+                         product.stock < 5 ? 'fa-exclamation-triangle' : 'fa-check-circle';
+        
+        // Handle gambar - dengan fallback jika error
         const productImage = product.image && product.image.trim() !== '' ? 
-            `<img src="${product.image}" alt="${product.name}" class="product-img" 
-                 onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\\'fas fa-smoking\\'></i>';">` :
-            `<i class="fas fa-smoking"></i>`;
+            `<img src="${product.image}" alt="${product.name}" 
+                 onerror="this.onerror=null; this.src=''; this.style.display='none'; this.nextElementSibling.style.display='flex';">` : 
+            '';
         
         return `
         <div class="product-card" data-category="${product.category}">
             <div class="product-image">
                 ${productImage}
+                <div class="image-fallback" ${product.image ? 'style="display:none;"' : ''}>
+                    <i class="fas fa-smoking"></i>
+                </div>
                 ${product.stock < 5 && product.stock > 0 ? '<span class="product-badge">Hampir Habis</span>' : ''}
             </div>
             <div class="product-info">
                 <h3 class="product-title">${product.name}</h3>
-                <div class="product-category">
-                    <i class="fas fa-tag"></i> ${product.category ? product.category.toUpperCase() : 'LIQUID'}
-                </div>
+                <span class="product-category">${product.category ? product.category.toUpperCase() : 'LIQUID'}</span>
+                
                 <div class="product-price">${formatPrice(product.price)}</div>
-                ${stockText}
-                // GANTI DENGAN INI:
-${product.stock > 0 ? `
-    <div class="product-stock-simple ${product.stock < 5 ? 'low-stock' : 'in-stock'}">
-        <i class="fas ${product.stock < 5 ? 'fa-exclamation-triangle' : 'fa-check-circle'}"></i>
-        Stok: ${product.stock}
-    </div>
-` : `
-    <div class="product-stock-simple out-of-stock">
-        <i class="fas fa-times-circle"></i>
-        Habis
-    </div>
-`}
-
-<!-- TOMBOL +/- SEDERHANA -->
-<div class="product-actions-simple">
-    <button class="qty-btn-simple" onclick="updateQuantity(${product.id}, -1)" 
-        ${quantity === 0 ? 'disabled' : ''}>
-        -
-    </button>
-    
-    <span class="qty-display-simple">
-        ${quantity}
-    </span>
-    
-    <button class="qty-btn-plus-simple" onclick="updateQuantity(${product.id}, 1)"
-        ${product.stock === 0 || quantity >= product.stock ? 'disabled' : ''}>
-        +
-    </button>
-</div>
+                
+                <div class="product-stock-simple ${stockStatus}">
+                    <i class="fas ${stockIcon}"></i>
+                    ${stockText}
+                </div>
+                
+                <!-- TOMBOL +/- SEDERHANA -->
+                <div class="product-actions-simple">
+                    <button class="qty-btn-simple" onclick="updateQuantity(${product.id}, -1)" 
+                        ${quantity === 0 ? 'disabled' : ''}>
+                        -
+                    </button>
+                    
+                    <span class="qty-display-simple">
+                        ${quantity}
+                    </span>
+                    
+                    <button class="qty-btn-plus-simple" onclick="updateQuantity(${product.id}, 1)"
+                        ${product.stock === 0 || quantity >= product.stock ? 'disabled' : ''}>
+                        +
+                    </button>
+                </div>
+            </div>
+        </div>
         `;
     }).join('');
     
@@ -373,7 +448,7 @@ ${product.stock > 0 ? `
 }
 
 // ============================================
-// FUNGSI FILTER PRODUK BERDASARKAN KATEGORI
+// FUNGSI FILTER PRODUK
 // ============================================
 function filterProducts(category) {
     // Update tombol kategori aktif
@@ -381,13 +456,9 @@ function filterProducts(category) {
         btn.classList.remove('active');
     });
     
-    // Tandai tombol kategori yang aktif
+    // Aktifkan tombol kategori yang sesuai
     const activeBtn = Array.from(document.querySelectorAll('.category-btn'))
-        .find(btn => {
-            const btnCategory = btn.getAttribute('onclick')?.includes(`'${category}'`) ? category : 
-                               btn.textContent.includes('Semua') ? 'all' : '';
-            return btnCategory === category;
-        });
+        .find(btn => btn.getAttribute('onclick')?.includes(`'${category}'`));
     
     if (activeBtn) {
         activeBtn.classList.add('active');
@@ -415,7 +486,7 @@ function updateQuantity(productId, change) {
             cart.splice(index, 1);
         } else if (newQuantity > product.stock) {
             // Tidak boleh melebihi stok
-            alert(`❌ Stok ${product.name} hanya tersedia ${product.stock} pcs`);
+            showNotification(`❌ Stok ${product.name} hanya ${product.stock}`);
             return;
         } else {
             // Update quantity
@@ -424,12 +495,7 @@ function updateQuantity(productId, change) {
     } else if (change > 0) {
         // Tambah produk baru ke keranjang
         if (product.stock === 0) {
-            alert(`❌ Maaf, ${product.name} sedang habis`);
-            return;
-        }
-        
-        if (product.stock < change) {
-            alert(`❌ Stok ${product.name} hanya tersedia ${product.stock} pcs`);
+            showNotification(`❌ ${product.name} sedang habis`);
             return;
         }
         
@@ -443,23 +509,18 @@ function updateQuantity(productId, change) {
     updateCartDisplay();
     renderProducts(currentCategory);
     
-    // Feedback visual
+    // Feedback
     if (change > 0) {
-        showNotification(`✅ ${product.name} ditambahkan ke keranjang`);
+        showNotification(`✅ ${product.name} ditambahkan`);
     }
 }
 
 function updateCartDisplay() {
     // Update jumlah item di icon keranjang
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-    document.getElementById('cartCount').textContent = totalItems;
+    document.getElementById('cartBadge').textContent = totalItems;
     
-    // Update tampilan Telegram MainButton
-    if (tg) {
-        tg.MainButton.setText(totalItems > 0 ? `🛒 Keranjang (${totalItems})` : "🛒 Buka Keranjang");
-    }
-    
-    // Update daftar item di sidebar keranjang
+    // Update daftar item di sidebar
     const cartItemsContainer = document.getElementById('cartItems');
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
@@ -481,9 +542,9 @@ function updateCartDisplay() {
                     <button class="cart-item-btn remove-btn" onclick="updateQuantity(${item.id}, -1)">
                         <i class="fas fa-minus"></i>
                     </button>
-                    <span style="font-weight: bold; min-width: 30px; text-align: center;">${item.quantity}</span>
-                    <button class="cart-item-btn" onclick="updateQuantity(${item.id}, 1)" 
-                        ${item.quantity >= item.stock ? 'disabled style="opacity: 0.5;"' : ''}>
+                    <span class="cart-item-quantity">${item.quantity}</span>
+                    <button class="cart-item-btn add-btn" onclick="updateQuantity(${item.id}, 1)"
+                        ${item.quantity >= item.stock ? 'disabled style="opacity:0.5;"' : ''}>
                         <i class="fas fa-plus"></i>
                     </button>
                 </div>
@@ -494,6 +555,11 @@ function updateCartDisplay() {
     // Update harga total
     document.getElementById('subtotalPrice').textContent = formatPrice(subtotal);
     document.getElementById('totalPrice').textContent = formatPrice(subtotal);
+    
+    // Update Telegram MainButton
+    if (tg) {
+        tg.MainButton.setText(totalItems > 0 ? `🛒 Keranjang (${totalItems})` : "🛒 Buka Keranjang");
+    }
 }
 
 // ============================================
@@ -512,7 +578,7 @@ function hideCart() {
 }
 
 // ============================================
-// FUNGSI CHECKOUT & ORDER
+// FUNGSI CHECKOUT & WHATSAPP
 // ============================================
 function openCheckoutForm() {
     if (cart.length === 0) {
@@ -525,7 +591,7 @@ function openCheckoutForm() {
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
     let summaryHTML = '';
-    cart.forEach(item => {
+    cart.forEach((item, index) => {
         summaryHTML += `
             <div class="order-item">
                 <span>${item.name} (${item.quantity}×)</span>
@@ -572,7 +638,7 @@ function processCheckout() {
     }
     
     // Validasi nomor telepon
-    const cleanPhone = phone.replace(/\D/g, ''); // Hapus semua non-digit
+    const cleanPhone = phone.replace(/\D/g, '');
     let formattedPhone = '';
     
     if (cleanPhone.startsWith('0')) {
@@ -586,12 +652,6 @@ function processCheckout() {
         return;
     }
     
-    // Validasi panjang nomor
-    if (formattedPhone.length < 10 || formattedPhone.length > 15) {
-        showNotification('❌ Nomor WhatsApp harus 10-15 digit');
-        return;
-    }
-    
     // Generate order ID
     const orderId = 'ORD' + Date.now().toString().slice(-8);
     const orderDate = new Date().toLocaleString('id-ID', {
@@ -602,8 +662,8 @@ function processCheckout() {
         minute: '2-digit'
     });
     
-    // Format pesan untuk WhatsApp (SIMPLE VERSION)
-    let whatsappMessage = `*Ladang Vape*\n`;
+    // Format pesan untuk WhatsApp
+    let whatsappMessage = `*${CONFIG.STORE_NAME}*\n`;
     whatsappMessage += `*ORDER ID:* ${orderId}\n`;
     whatsappMessage += `*Tanggal:* ${orderDate}\n\n`;
     
@@ -630,8 +690,11 @@ function processCheckout() {
     whatsappMessage += `\n*TOTAL: ${formatPrice(total)}*\n\n`;
     whatsappMessage += `_Pesanan ini dibuat via Telegram Mini App_`;
     
-    // URL WhatsApp yang BENAR
-    const whatsappURL = `https://api.whatsapp.com/send?phone=${CONFIG.ADMIN_WHATSAPP}&text=${encodeURIComponent(whatsappMessage)}`;
+    // Encode pesan untuk URL
+    const encodedMessage = encodeURIComponent(whatsappMessage);
+    
+    // Buat URL WhatsApp
+    const whatsappURL = `https://wa.me/${CONFIG.ADMIN_WHATSAPP}?text=${encodedMessage}`;
     
     // Simpan order ke localStorage
     saveOrderToLocalStorage({
@@ -650,7 +713,7 @@ function processCheckout() {
         status: 'pending'
     });
     
-    // Buka WhatsApp di tab baru
+    // Buka WhatsApp
     window.open(whatsappURL, '_blank');
     
     // Reset keranjang
@@ -663,7 +726,7 @@ function processCheckout() {
     hideCart();
     
     // Tampilkan konfirmasi
-    showNotification('✅ Order berhasil! WhatsApp admin terbuka.');
+    showNotification('✅ Order berhasil! Admin akan menghubungi Anda.');
 }
 
 // ============================================
@@ -677,6 +740,28 @@ function formatPrice(price) {
     }).format(price);
 }
 
+function showLoading(show) {
+    const loadingEl = document.getElementById('loadingScreen');
+    if (loadingEl) {
+        if (show) {
+            loadingEl.style.display = 'flex';
+            loadingEl.style.opacity = '1';
+        } else {
+            loadingEl.style.opacity = '0';
+            setTimeout(() => {
+                loadingEl.style.display = 'none';
+            }, 300);
+        }
+    }
+}
+
+function updateLoadingText(text) {
+    const loadingText = document.getElementById('loadingText');
+    if (loadingText) {
+        loadingText.textContent = text;
+    }
+}
+
 function showNotification(message) {
     // Buat element notifikasi
     const notification = document.createElement('div');
@@ -687,13 +772,14 @@ function showNotification(message) {
         background: var(--dark);
         color: white;
         padding: 15px 20px;
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
         z-index: 9999;
         transform: translateX(120%);
         transition: transform 0.3s ease;
         max-width: 300px;
         font-weight: 500;
+        font-size: 14px;
     `;
     
     notification.textContent = message;
@@ -708,33 +794,30 @@ function showNotification(message) {
     setTimeout(() => {
         notification.style.transform = 'translateX(120%)';
         setTimeout(() => {
-            document.body.removeChild(notification);
+            if (notification.parentNode) {
+                document.body.removeChild(notification);
+            }
         }, 300);
     }, 3000);
 }
 
 function saveOrderToLocalStorage(orderData) {
     try {
-        // Ambil order yang sudah ada
-        const existingOrders = JSON.parse(localStorage.getItem('LadangVApeOrders') || '[]');
-        
-        // Tambah order baru
+        const existingOrders = JSON.parse(localStorage.getItem('ladangVape_orders') || '[]');
         existingOrders.unshift(orderData);
         
         // Simpan maksimal 50 order terakhir
         const trimmedOrders = existingOrders.slice(0, 50);
+        localStorage.setItem('ladangVape_orders', JSON.stringify(trimmedOrders));
         
-        // Simpan ke localStorage
-        localStorage.setItem('LadangVApeOrders', JSON.stringify(trimmedOrders));
-        
-        console.log('✅ Order disimpan ke localStorage:', orderData.orderId);
+        console.log('✅ Order disimpan:', orderData.orderId);
     } catch (error) {
-        console.error('❌ Gagal menyimpan order ke localStorage:', error);
+        console.error('❌ Gagal menyimpan order:', error);
     }
 }
 
 // ============================================
-// EXPOSED FUNCTIONS (untuk onclick di HTML)
+// EXPOSE FUNCTIONS KE WINDOW
 // ============================================
 window.filterProducts = filterProducts;
 window.updateQuantity = updateQuantity;
@@ -744,10 +827,13 @@ window.openCheckoutForm = openCheckoutForm;
 window.closeCheckoutForm = closeCheckoutForm;
 window.processCheckout = processCheckout;
 
-// Tambah fungsi ini di akhir file script.js
+// ============================================
+// DEBUG FUNCTIONS (opsional)
+// ============================================
 function debugProducts() {
-    console.log("=== DEBUG PRODUK ===");
-    console.log("Total produk:", allProducts.length);
+    console.log('=== DEBUG PRODUK ===');
+    console.log('Total produk:', allProducts.length);
+    console.log('Dengan gambar:', allProducts.filter(p => p.image).length);
     
     allProducts.forEach((product, index) => {
         console.log(`Produk #${index + 1}:`, {
@@ -755,105 +841,9 @@ function debugProducts() {
             harga: product.price,
             kategori: product.category,
             gambar: product.image || '(tidak ada)',
-            panjang_link: product.image ? product.image.length : 0
+            stok: product.stock
         });
     });
-    
-    // Cek apakah gambar load
-    if (allProducts.length > 0 && allProducts[0].image) {
-        console.log("Testing gambar pertama:", allProducts[0].image);
-        
-        // Test load gambar
-        const testImg = new Image();
-        testImg.onload = () => console.log("✅ Gambar bisa di-load");
-        testImg.onerror = () => console.log("❌ Gambar ERROR (404 atau CORS)");
-        testImg.src = allProducts[0].image;
-    }
 }
 
-// Panggil setelah load products
-// Tambah di fungsi loadProductsFromGoogleSheets(), setelah allProducts = parseCSV(csvData);
-debugProducts();
-
-async function loadProductsFromGoogleSheets() {
-    showLoading(true);
-    
-    // Cek cache dulu (valid 5 menit)
-    const cacheKey = 'LadangVApe_products_cache';
-    const cacheTimeKey = 'LadangVApe_cache_time';
-    const now = Date.now();
-    const cacheExpiry = 5 * 60 * 1000; // 5 menit
-    
-    const cachedTime = localStorage.getItem(cacheTimeKey);
-    const cachedData = localStorage.getItem(cacheKey);
-    
-    // Jika cache masih valid
-    if (cachedData && cachedTime && (now - parseInt(cachedTime)) < cacheExpiry) {
-        console.log('📦 Menggunakan data cache');
-        allProducts = JSON.parse(cachedData);
-        renderProducts('all');
-        showLoading(false);
-        return;
-    }
-    
-    try {
-        // Load dari Google Sheets
-        const response = await fetch(CONFIG.GOOGLE_SHEETS_URL);
-        const csvData = await response.text();
-        
-        allProducts = parseCSV(csvData);
-        
-        if (allProducts.length === 0) {
-            throw new Error('Data kosong');
-        }
-        
-        // Simpan ke cache
-        localStorage.setItem(cacheKey, JSON.stringify(allProducts));
-        localStorage.setItem(cacheTimeKey, now.toString());
-        
-        console.log(`✅ ${allProducts.length} produk dimuat & dicache`);
-        renderProducts('all');
-        
-    } catch (error) {
-        console.error('❌ Error:', error);
-        
-        // Fallback ke cache lama atau sample
-        if (cachedData) {
-            allProducts = JSON.parse(cachedData);
-            showNotification('⚠️ Menggunakan data cache (offline mode)');
-        } else {
-            allProducts = getSampleProducts();
-            showNotification('⚠️ Menggunakan data sample');
-        }
-        
-        renderProducts('all');
-    } finally {
-        showLoading(false);
-    }
-}
-
-// Debug function
-function debugLoadTime() {
-    console.log('=== DEBUG LOAD TIME ===');
-    console.log('Google Sheets URL:', CONFIG.GOOGLE_SHEETS_URL);
-    
-    // Test fetch speed
-    const startTime = Date.now();
-    fetch(CONFIG.GOOGLE_SHEETS_URL)
-        .then(res => {
-            const fetchTime = Date.now() - startTime;
-            console.log(`Fetch time: ${fetchTime}ms`);
-            return res.text();
-        })
-        .then(text => {
-            const parseTime = Date.now() - startTime;
-            console.log(`Total time: ${parseTime}ms`);
-            console.log(`Data size: ${text.length} chars`);
-            console.log(`Lines: ${text.split('\n').length}`);
-        })
-        .catch(err => {
-            console.error('Fetch error:', err);
-        });
-}
-
-// Jalankan di console: debugLoadTime()
+// Jalankan: debugProducts() di Console

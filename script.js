@@ -688,7 +688,7 @@ function processCheckout() {
     });
     
     whatsappMessage += `\n*TOTAL: ${formatPrice(total)}*\n\n`;
-    whatsappMessage += `_Pesanan ini dibuat via Telegram Mini App_`;
+    whatsappMessage += `_Pesanan ini dibuat dari Ladang VApe Store_`;
     
     // Encode pesan untuk URL
     const encodedMessage = encodeURIComponent(whatsappMessage);
@@ -847,5 +847,6 @@ function debugProducts() {
 }
 
 // Jalankan: debugProducts() di Console
+
 
 
